@@ -4,27 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-slint = "1.9" # Vérifier la dernière version
+slint = "1.9"
 rayon = "1.10"
 ignore = "0.4"
-# Pour le presse-papier (Copier le chemin)
 arboard = "3.4" 
-# Pour détecter le nombre de CPU
 num_cpus = "1.0"
-# Pour détecter le thème système (Dark/Light)
 dark-light = "1.0"
-# Pour les boîtes de dialogue natives (Sélection dossier)
 rfd = "0.14"
-# Pour la recherche par Regex
 regex = "1.10"
-# Optionnel : Pour l'effet Mica (nécessite configuration winit)
 window-vibrancy = "0.7.1" 
-# Accès à la fenêtre winit sous-jacente (pour window-vibrancy)
 i-slint-backend-winit = "1.9"
-# Pour la sérialisation JSON des favoris
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# Pour obtenir le dossier de configuration
 dirs = "5.0"
 
 [build-dependencies]

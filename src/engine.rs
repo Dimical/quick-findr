@@ -1,14 +1,14 @@
 use ignore::WalkBuilder;
 use rayon::prelude::*;
+use regex::RegexBuilder;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use regex::RegexBuilder;
 
-// On réutilise une structure simple pour passer les infos au Main
+// Résultat renvoyé au thread UI (main.rs) via invoke_from_event_loop.
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub file_name: String,
@@ -31,29 +31,37 @@ pub struct SearchContext {
 }
 
 impl SearchContext {
-    pub fn new(query: String, case_sensitive: bool, use_regex: bool, search_content: bool, root_path: PathBuf, exclude_extensions: String, respect_gitignore: bool, _language_filter: Option<String>) -> Option<Self> {
-        // Détection automatique des wildcards (* ou ?)
+    // Crée un nouveau contexte de recherche.
+    pub fn new(
+        query: String,
+        case_sensitive: bool,
+        use_regex: bool,
+        search_content: bool,
+        root_path: PathBuf,
+        exclude_extensions: String,
+        respect_gitignore: bool,
+        _language_filter: Option<String>,
+    ) -> Option<Self> {
+        // Les wildcards (*, ?) activent un mode "regex" par convenance.
         let has_wildcards = query.contains('*') || query.contains('?');
         let should_use_regex = use_regex || has_wildcards;
-        
+
         let regex = if should_use_regex {
             let pattern = if has_wildcards && !use_regex {
-                // Convertir les wildcards en regex
-                // Échapper les caractères spéciaux regex sauf * et ?
+                // Conversion des wildcards en regex (en échappant le reste).
                 let escaped = regex::escape(&query);
-                // Remplacer les wildcards échappés par leurs équivalents regex
                 let pattern = escaped
-                    .replace(r"\*", ".*")  // * devient .*
-                    .replace(r"\?", ".");   // ? devient .
-                // Ancrer le pattern pour matcher exactement le nom complet
+                    .replace(r"\*", ".*") // * devient .*
+                    .replace(r"\?", "."); // ? devient .
                 format!("^{}$", pattern)
             } else {
                 query.clone()
             };
-            
+
             match RegexBuilder::new(&pattern)
                 .case_insensitive(!case_sensitive)
-                .build() {
+                .build()
+            {
                 Ok(re) => Some(re),
                 Err(_) => return None, // Invalid regex
             }
@@ -90,6 +98,7 @@ impl SearchContext {
         })
     }
 
+    // Vérifie si la chaîne donnée correspond à la requête.
     pub fn is_match(&self, text: &str) -> bool {
         if self.use_regex {
             if let Some(re) = &self.regex {
@@ -98,14 +107,14 @@ impl SearchContext {
             return false;
         }
 
-        // CamelCase matching : si la query est en majuscules uniquement, essayer le matching CamelCase
+        // CamelCase matching: si la query est en majuscules/chiffres (ex: "UC"), matcher les majuscules du nom.
         if self.is_camelcase_query() {
             if self.camelcase_match(text) {
                 return true;
             }
         }
 
-        // Recherche normale
+        // Substring matching.
         if self.case_sensitive {
             text.contains(&self.query)
         } else {
@@ -113,40 +122,52 @@ impl SearchContext {
         }
     }
 
-    /// Vérifie si la query est un pattern CamelCase (ex: "UC", "UCS", "U2C")
+    // Vérifie si la query est un pattern CamelCase (ex: "UC", "UCS", "U2C")
     fn is_camelcase_query(&self) -> bool {
         // Pattern CamelCase : au moins 2 caractères, tous en majuscules ou chiffres
-        self.query.len() >= 2 && self.query.chars().all(|c| c.is_uppercase() || c.is_numeric())
+        self.query.len() >= 2
+            && self
+                .query
+                .chars()
+                .all(|c| c.is_uppercase() || c.is_numeric())
     }
 
-    /// Matching CamelCase : "UC" matche "UserController", "U2C" matche "User2Controller"
+    // Matching CamelCase: "UC" matche "UserController", "U2C" matche "User2Controller"
     fn camelcase_match(&self, text: &str) -> bool {
         let query_chars: Vec<char> = self.query.chars().collect();
         let mut query_idx = 0;
-        
+
         for ch in text.chars() {
             if query_idx >= query_chars.len() {
                 return true;
             }
-            
+
             // Matcher les majuscules et chiffres de la query avec ceux du texte
             if (ch.is_uppercase() || ch.is_numeric()) && ch == query_chars[query_idx] {
                 query_idx += 1;
             }
         }
-        
+
         query_idx >= query_chars.len()
     }
 }
 
-/// Configuration du scan pour éviter les dossiers trop lourds par défaut
-const IGNORED_DIRS: &[&str] = &["target", ".git", "node_modules", "vendor", ".idea", ".vscode"];
+// Exclusions par défaut (garde le scan rapide et évite les dossiers de build/vendor).
+const IGNORED_DIRS: &[&str] = &[
+    "target",
+    ".git",
+    "node_modules",
+    "vendor",
+    ".idea",
+    ".vscode",
+];
 
+// Lance une recherche dans un thread séparé.
 pub fn spawn_search(
     query: String,
     root_path: PathBuf,
-    sender: slint::Weak<crate::AppWindow>, // Handle vers l'UI
-    is_searching: Arc<AtomicBool>, // Pour annuler le scan si besoin
+    sender: slint::Weak<crate::AppWindow>,
+    is_searching: Arc<AtomicBool>,
     case_sensitive: bool,
     use_regex: bool,
     search_content: bool,
@@ -157,17 +178,26 @@ pub fn spawn_search(
     let root_path_clone = root_path.clone();
     std::thread::spawn(move || {
         let start_time = Instant::now();
-        
-        // Préparation du contexte de recherche (Regex compilation, etc.)
-        let context = match SearchContext::new(query, case_sensitive, use_regex, search_content, root_path_clone.clone(), exclude_extensions, respect_gitignore, language_filter) {
+
+        // Préparation du contexte (compilation regex, parsing des exclusions, etc.)
+        let context = match SearchContext::new(
+            query,
+            case_sensitive,
+            use_regex,
+            search_content,
+            root_path_clone.clone(),
+            exclude_extensions,
+            respect_gitignore,
+            language_filter,
+        ) {
             Some(ctx) => ctx,
             None => {
                 let _ = slint::invoke_from_event_loop({
                     let sender_clone = sender.clone();
                     move || {
                         if let Some(window) = sender_clone.upgrade() {
-                             window.set_status_text("Erreur : Expression régulière invalide".into());
-                             window.set_active_threads(0);
+                            window.set_status_text("Erreur : Expression régulière invalide".into());
+                            window.set_active_threads(0);
                         }
                     }
                 });
@@ -175,31 +205,31 @@ pub fn spawn_search(
             }
         };
 
-        // 1. Configuration du Walker (ignore)
+        // Pipeline: WalkBuilder -> process_file() -> résultats -> push UI.
         let mut builder = WalkBuilder::new(&root_path);
         builder
-            .hidden(true) // Ignorer les fichiers cachés
-            .git_ignore(context.respect_gitignore) // Respecter le .gitignore selon paramètre
-            .threads(num_cpus::get()); // Optimisation native du walker
+            .hidden(true)
+            .git_ignore(context.respect_gitignore)
+            .threads(num_cpus::get());
 
-        // Ajout des exclusions manuelles (Config)
+        // Exclusions manuelles.
         for dir in IGNORED_DIRS {
-            builder.add_ignore(format!("**/{}/**", dir)); // Ignore files in these dirs
+            builder.add_ignore(format!("**/{}/**", dir));
         }
 
-        // Pré-filtrage par extensions exclues (optimisation)
+        // Pré-filtrage par extensions exclues.
         if !context.exclude_extensions.is_empty() {
             for ext in context.exclude_extensions.iter() {
                 if !ext.is_empty() {
-                    builder.add_ignore(format!("**/*{}", ext)); // Ignore files with these extensions
+                    builder.add_ignore(format!("**/*{}", ext));
                 }
             }
         }
 
-        // 2. Conversion en itérateur parallèle avec Rayon et collecte des résultats
-        let all_results: Vec<SearchResult> = builder.build().par_bridge()
+        let all_results: Vec<SearchResult> = builder
+            .build()
+            .par_bridge()
             .filter_map(|entry| {
-                // Vérification du flag d'arrêt (si l'utilisateur annule ou quitte)
                 if !is_searching.load(Ordering::Relaxed) {
                     return None;
                 }
@@ -207,9 +237,8 @@ pub fn spawn_search(
                 match entry {
                     Ok(dir_entry) => {
                         let path = dir_entry.path();
-                        
+
                         if path.is_file() {
-                            // Logique de recherche (Nom OU Contenu)
                             process_file(path, &context)
                         } else {
                             None
@@ -250,7 +279,13 @@ pub fn spawn_search(
         let duration = start_time.elapsed().as_millis() as u64;
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(window) = sender.upgrade() {
-                window.set_status_text(format!("Terminé : {} résultats en {}ms", total_results_count, duration).into());
+                window.set_status_text(
+                    format!(
+                        "Terminé : {} résultats en {}ms",
+                        total_results_count, duration
+                    )
+                    .into(),
+                );
                 window.set_active_threads(0);
             }
         });
@@ -260,8 +295,12 @@ pub fn spawn_search(
 /// Fonction unitaire de scan (exécutée par les threads Rayon)
 fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
     let file_name = path.file_name()?.to_string_lossy();
-    let extension = path.extension().unwrap_or_default().to_string_lossy().to_string();
-    
+    let extension = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
     // Filtrage par extension exclue
     let ext_lower = extension.to_lowercase();
     if !context.exclude_extensions.is_empty() {
@@ -277,9 +316,10 @@ fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
             }
         }
     }
-    
+
     // Calcul du chemin relatif
-    let relative_path = path.strip_prefix(&context.root_path)
+    let relative_path = path
+        .strip_prefix(&context.root_path)
         .unwrap_or(path)
         .to_string_lossy()
         .to_string();
@@ -295,7 +335,7 @@ fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
         // Pour les recherches normales, matcher sur le nom complet
         file_name.to_string()
     };
-    
+
     if context.is_match(&match_target) {
         return Some(SearchResult {
             file_name: file_name.to_string(),
@@ -320,7 +360,7 @@ fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
     if let Ok(file) = File::open(path) {
         // Utilisation de BufReader pour la performance I/O
         let reader = BufReader::new(file);
-        
+
         // On scanne ligne par ligne avec un index
         for (i, line) in reader.lines().enumerate() {
             if let Ok(content) = line {
@@ -331,12 +371,14 @@ fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
                         file_path: path.to_string_lossy().to_string(),
                         relative_path,
                         extension,
-                        line_match: format!("L{}: {}", i + 1, content.trim()), 
+                        line_match: format!("L{}: {}", i + 1, content.trim()),
                     });
                 }
             }
             // Sécurité : On arrête de lire si le fichier est trop gros ou sans match après N lignes
-            if i > 5000 { break; } 
+            if i > 5000 {
+                break;
+            }
         }
     }
 
@@ -345,7 +387,10 @@ fn process_file(path: &Path, context: &SearchContext) -> Option<SearchResult> {
 
 /// Helper pour ignorer les extensions binaires (liste non exhaustive)
 fn is_likely_binary(ext: &str) -> bool {
-    matches!(ext.to_lowercase().as_str(), "exe" | "dll" | "png" | "jpg" | "pdf" | "zip" | "class" | "jar" | "ico" | "mp3" | "mp4")
+    matches!(
+        ext.to_lowercase().as_str(),
+        "exe" | "dll" | "png" | "jpg" | "pdf" | "zip" | "class" | "jar" | "ico" | "mp3" | "mp4"
+    )
 }
 
 #[cfg(test)]
@@ -419,7 +464,8 @@ mod tests {
             ".exe, .dll ,.jpg, .png".to_string(),
             true,
             None,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(ctx.exclude_extensions, vec![".exe", ".dll", ".jpg", ".png"]);
     }
 
@@ -434,7 +480,8 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(ctx.exclude_extensions.is_empty());
     }
 
@@ -453,8 +500,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("Test"));
         assert!(ctx.is_match("test"));
         assert!(ctx.is_match("TEST"));
@@ -473,8 +521,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("Test"));
         assert!(ctx.is_match("This is a Test"));
         assert!(!ctx.is_match("test"));
@@ -492,8 +541,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("anything"));
         assert!(ctx.is_match(""));
     }
@@ -513,8 +563,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("123"));
         assert!(ctx.is_match("file123"));
         assert!(!ctx.is_match("abc"));
@@ -531,8 +582,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("test"));
         assert!(ctx.is_match("a test file"));
         assert!(!ctx.is_match("testing"));
@@ -549,8 +601,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("Test"));
         assert!(!ctx.is_match("test"));
     }
@@ -566,8 +619,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("TODO: Fix this bug"));
         assert!(ctx.is_match("FIXME: Refactor"));
         assert!(!ctx.is_match("NOTE: This is fine"));
@@ -588,8 +642,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("café"));
         assert!(ctx.is_match("CAFÉ"));
     }
@@ -605,8 +660,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let haystack = "a".repeat(10000) + "needle" + &"b".repeat(10000);
         assert!(ctx.is_match(&haystack));
     }
@@ -622,8 +678,9 @@ mod tests {
             ".EXE, .DLL, .Jpg".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(ctx.exclude_extensions, vec![".exe", ".dll", ".jpg"]);
     }
 
@@ -646,8 +703,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("test"));
         assert!(!ctx.is_match("test "));
         assert!(!ctx.is_match("testing"));
@@ -664,8 +722,9 @@ mod tests {
             "  .exe  ,  .dll  ".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(ctx.exclude_extensions, vec![".exe", ".dll"]);
     }
 
@@ -680,8 +739,9 @@ mod tests {
             ".exe,,.dll".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(ctx.exclude_extensions, vec![".exe", ".dll"]);
     }
 
@@ -696,8 +756,9 @@ mod tests {
             ".rs,.toml".to_string(),
             false,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(ctx.query, "MyQuery");
         assert_eq!(ctx.query_lower, "myquery");
         assert!(ctx.case_sensitive);
@@ -722,14 +783,15 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Devrait matcher les noms de fichiers (sans extension) se terminant par "controller"
         assert!(ctx.is_match("UserController"));
         assert!(ctx.is_match("TotoController"));
         assert!(ctx.is_match("MyController"));
         assert!(ctx.is_match("controller"));
-        
+
         // Ne devrait pas matcher
         assert!(!ctx.is_match("ControllerService"));
         assert!(!ctx.is_match("MyService"));
@@ -746,8 +808,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserController"));
         assert!(ctx.is_match("UserService"));
         assert!(ctx.is_match("User"));
@@ -765,8 +828,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserService"));
         assert!(ctx.is_match("UserAuthService"));
         assert!(ctx.is_match("UserManagementService"));
@@ -784,8 +848,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("User1"));
         assert!(ctx.is_match("UserA"));
         assert!(ctx.is_match("Users"));
@@ -804,8 +869,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("MyUserController"));
         assert!(ctx.is_match("AdminUserControllerImpl"));
         assert!(ctx.is_match("UserController"));
@@ -823,8 +889,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserController"));
         assert!(ctx.is_match("usercontroller"));
         assert!(ctx.is_match("MyController"));
@@ -841,8 +908,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Le point dans .java devrait être échappé
         assert!(ctx.is_match("UserController.java"));
         assert!(ctx.is_match("User.java"));
@@ -860,8 +928,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Sans wildcard, devrait fonctionner comme avant (contains)
         assert!(ctx.is_match("UserController.java"));
         assert!(ctx.is_match("Controller"));
@@ -887,8 +956,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserController"));
         assert!(ctx.is_match("UsersController"));
         assert!(ctx.is_match("UpdateController"));
@@ -907,8 +977,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserControllerService"));
         assert!(ctx.is_match("UpdateCustomerService"));
         assert!(!ctx.is_match("UserController"));
@@ -926,8 +997,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("User2Controller"));
         assert!(!ctx.is_match("UserController"));
     }
@@ -943,8 +1015,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Si pas de match CamelCase, devrait fallback sur recherche normale
         assert!(ctx.is_match("ABUC"));
         assert!(ctx.is_match("testUCvalue"));
@@ -961,8 +1034,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // "User" n'est pas un pattern CamelCase (pas tout en majuscules)
         // Devrait faire une recherche normale
         assert!(ctx.is_match("UserController"));
@@ -981,8 +1055,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Une seule lettre n'est pas un pattern CamelCase
         // Devrait faire une recherche normale
         assert!(ctx.is_match("UserController"));
@@ -1000,8 +1075,9 @@ mod tests {
             "".to_string(),
             true,
             None,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(ctx.is_match("UserAuthenticationControllerService"));
         assert!(ctx.is_match("UpdateAccountCustomerService"));
         assert!(!ctx.is_match("UserController"));

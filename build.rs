@@ -1,12 +1,12 @@
 fn main() {
     slint_build::compile("ui/app_window.slint").unwrap();
-    
+
     // Configuration de l'icône Windows (optionnel)
     #[cfg(target_os = "windows")]
     {
         use std::path::Path;
         let icon_path = "assets/icon.png";
-        
+
         if Path::new(icon_path).exists() {
             let mut res = winres::WindowsResource::new();
             res.set_icon(icon_path);

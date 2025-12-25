@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub struct FavoriteFolder {
     pub path: String,
     pub name: String,
-    pub last_used: u64, // timestamp
+    pub last_used: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,27 +25,27 @@ impl FavoritesManager {
 
     pub fn load() -> Self {
         let config_path = Self::get_config_path();
-        
+
         if let Ok(content) = fs::read_to_string(&config_path) {
             if let Ok(manager) = serde_json::from_str(&content) {
                 return manager;
             }
         }
-        
+
         Self::new()
     }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = Self::get_config_path();
-        
-        // Créer le dossier parent si nécessaire
+
+        // Create config directory on first save.
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         let json = serde_json::to_string_pretty(self)?;
         fs::write(&config_path, json)?;
-        
+
         Ok(())
     }
 
@@ -57,7 +57,7 @@ impl FavoritesManager {
     }
 
     pub fn add_favorite(&mut self, path: String, name: String) {
-        // Vérifier si déjà présent
+        // Do not add duplicates.
         if !self.favorites.iter().any(|f| f.path == path) {
             self.favorites.push(FavoriteFolder {
                 path,
@@ -75,44 +75,47 @@ impl FavoritesManager {
 
     pub fn add_recent(&mut self, path: String) {
         let timestamp = Self::current_timestamp();
-        
-        // Retirer si déjà présent
+
+        // Keep a unique list.
         self.recent_folders.retain(|f| f.path != path);
-        
-        // Ajouter en tête
+
+        // Insert at the front (most recent first).
         let name = PathBuf::from(&path)
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(&path)
             .to_string();
-        
-        self.recent_folders.insert(0, FavoriteFolder {
-            path,
-            name,
-            last_used: timestamp,
-        });
-        
-        // Garder seulement les 10 derniers
+
+        self.recent_folders.insert(
+            0,
+            FavoriteFolder {
+                path,
+                name,
+                last_used: timestamp,
+            },
+        );
+
+        // Keep only the last 10.
         if self.recent_folders.len() > 10 {
             self.recent_folders.truncate(10);
         }
-        
+
         let _ = self.save();
     }
 
     pub fn update_last_used(&mut self, path: &str) {
         let timestamp = Self::current_timestamp();
-        
-        // Mettre à jour dans les favoris
+
+        // Update in favorites.
         if let Some(fav) = self.favorites.iter_mut().find(|f| f.path == path) {
             fav.last_used = timestamp;
         }
-        
-        // Mettre à jour dans les récents
+
+        // Update in recents.
         if let Some(recent) = self.recent_folders.iter_mut().find(|f| f.path == path) {
             recent.last_used = timestamp;
         }
-        
+
         let _ = self.save();
     }
 
@@ -121,12 +124,6 @@ impl FavoritesManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs()
-    }
-
-    pub fn get_all_folders(&self) -> Vec<FavoriteFolder> {
-        let mut all = self.favorites.clone();
-        all.extend(self.recent_folders.clone());
-        all
     }
 }
 
@@ -138,7 +135,7 @@ mod tests {
     fn test_add_favorite() {
         let mut manager = FavoritesManager::new();
         manager.add_favorite("/test/path".to_string(), "Test".to_string());
-        
+
         assert_eq!(manager.favorites.len(), 1);
         assert_eq!(manager.favorites[0].path, "/test/path");
         assert_eq!(manager.favorites[0].name, "Test");
@@ -149,7 +146,7 @@ mod tests {
         let mut manager = FavoritesManager::new();
         manager.add_favorite("/test/path".to_string(), "Test".to_string());
         manager.add_favorite("/test/path".to_string(), "Test".to_string());
-        
+
         assert_eq!(manager.favorites.len(), 1);
     }
 
@@ -158,7 +155,7 @@ mod tests {
         let mut manager = FavoritesManager::new();
         manager.add_favorite("/test/path".to_string(), "Test".to_string());
         manager.remove_favorite("/test/path");
-        
+
         assert_eq!(manager.favorites.len(), 0);
     }
 
@@ -167,7 +164,7 @@ mod tests {
         let mut manager = FavoritesManager::new();
         manager.add_recent("/test/path1".to_string());
         manager.add_recent("/test/path2".to_string());
-        
+
         assert_eq!(manager.recent_folders.len(), 2);
         assert_eq!(manager.recent_folders[0].path, "/test/path2"); // Le plus récent en premier
     }
@@ -175,11 +172,11 @@ mod tests {
     #[test]
     fn test_recent_limit() {
         let mut manager = FavoritesManager::new();
-        
+
         for i in 0..15 {
             manager.add_recent(format!("/test/path{}", i));
         }
-        
+
         assert_eq!(manager.recent_folders.len(), 10); // Max 10
     }
 
@@ -188,7 +185,7 @@ mod tests {
         let mut manager = FavoritesManager::new();
         manager.add_recent("/test/path".to_string());
         manager.add_recent("/test/path".to_string());
-        
+
         assert_eq!(manager.recent_folders.len(), 1);
     }
 }

@@ -34,7 +34,7 @@ component MenuItem inherits Rectangle {
         
         if (root.icon != "") : Text {
             text: root.icon;
-            font-family: "Segoe UI Emoji"; // Force l'affichage des icones sous Windows
+            font-family: "Segoe UI Emoji";
             color: #60CDFF;
             vertical-alignment: center;
             font-size: 14px;
@@ -76,7 +76,7 @@ component IconButton inherits Rectangle {
         alignment: center;
         Text {
             text: root.text;
-            font-family: "Segoe UI"; // Police Windows standard
+            font-family: "Segoe UI";
             color: primary ? #ffffff : (root.dark-mode ? #ffffff : #333333);
             font-weight: 600;
             font-size: 13px;
@@ -86,7 +86,7 @@ component IconButton inherits Rectangle {
     }
 }
 
-// Correction du bug visuel "Carré" dans les filtres
+// Filter chip component.
 component FilterChip inherits Rectangle {
     in-out property <bool> checked;
     in property <string> text;
@@ -118,15 +118,14 @@ component FilterChip inherits Rectangle {
         padding-right: 12px;
         spacing: 6px;
 
-        // REMPLACEMENT DU TEXTE PAR UN DESSIN VECTORIEL (PATH)
-        // Cela évite les bugs de police (carrés)
+        // Vector checkmark (avoids font/emoji rendering issues).
         if (checked) : Path {
             width: 10px;
             height: 10px;
             viewbox-x: 0; viewbox-y: 0; viewbox-width: 10; viewbox-height: 10;
             stroke: white;
             stroke-width: 1.5px;
-            commands: "M 1 5 L 4 8 L 9 2"; // Dessine un "Check" manuel
+            commands: "M 1 5 L 4 8 L 9 2";
             y: (parent.height - self.height) / 2;
         }
 
