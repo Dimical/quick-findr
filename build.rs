@@ -1,7 +1,7 @@
 fn main() {
     slint_build::compile("ui/app_window.slint").unwrap();
 
-    // Configuration de l'icône Windows (optionnel)
+    // Windows icon configuration (optional)
     #[cfg(target_os = "windows")]
     {
         use std::path::Path;
@@ -11,10 +11,10 @@ fn main() {
             let mut res = winres::WindowsResource::new();
             res.set_icon(icon_path);
             if let Err(e) = res.compile() {
-                println!("cargo:warning=Impossible de compiler l'icône: {}", e);
+                println!("cargo:warning=Unable to compile icon: {}", e);
             }
         } else {
-            println!("cargo:warning=Icône non trouvée: {}. L'application sera compilée sans icône personnalisée.", icon_path);
+            println!("cargo:warning=Icon not found: {}. Application will be compiled without custom icon.", icon_path);
         }
     }
 }

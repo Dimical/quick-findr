@@ -160,7 +160,7 @@ component ResultCard inherits Rectangle {
         padding: 8px;
         spacing: 12px;
 
-        // 1. Icone colorée à gauche
+        // 1. Colored icon on the left
         Rectangle {
             width: 38px;
             height: 38px;
@@ -266,15 +266,15 @@ export component AppWindow inherits Window {
     icon: @image-url("../assets/icon.png");
     min-width: 900px;
     min-height: 650px;
-    default-font-family: "Segoe UI"; // Définit la police système par défaut
+    default-font-family: "Segoe UI"; // Sets the default system font
     
     in property <bool> dark-mode: true; 
     background: dark-mode ? #1e1e1e : #f9f9f9;
 
     in-out property <string> search-query: "";
-    in-out property <string> current-path: "Sélectionner un dossier...";
+    in-out property <string> current-path: "Select a folder...";
     in property <[SearchResult]> results: [];
-    in property <string> status-text: "Prêt";
+    in property <string> status-text: "Ready";
     in property <int> active-threads: 0;
     
     in-out property <int> current-selection: -1;
@@ -292,9 +292,9 @@ export component AppWindow inherits Window {
     in-out property <bool> include-build: false;
     in-out property <bool> include-archives: false;
 
-    // Propriété calculée automatiquement : contient la liste des extensions à exclure
-    // Si un bouton est cochée (true), on renvoie une chaîne vide pour NE PAS exclure ces fichiers.
-    // Sinon, on renvoie la liste des extensions à bannir.
+    // Automatically calculated property: contains the list of extensions to exclude
+    // If a button is checked (true), return empty string to NOT exclude these files.
+    // Otherwise, return the list of extensions to ban.
     private property <string> active-exclude-extensions: 
         (include-logs ? "" : ".log,") + 
         (include-binaries ? "" : ".exe,.dll,.so,.dylib,.class,.o,.obj,.pyc,") + 
@@ -432,7 +432,7 @@ export component AppWindow inherits Window {
                                     overflow: elide;
                                     horizontal-stretch: 1;
                                 }
-                                // Indicateur visuel qu'on peut changer (chevron ou icone edit discrète)
+                                // Visual indicator that can be changed (chevron or discrete edit icon)
                                 Text {
                                     text: "✏️";
                                     font-family: "Segoe UI Emoji";
@@ -451,7 +451,7 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        // Bouton paramètres amélioré
+                        // Enhanced settings button
                         Rectangle {
                             width: 36px;
                             height: 32px;
@@ -599,7 +599,7 @@ export component AppWindow inherits Window {
                         spacing: 16px;
                         alignment: center;
                         
-                        // Icône professionnelle (Loupe vectorielle)
+                        // Professional icon (Vector magnifying glass)
                         Path {
                             width: 64px;
                             height: 64px;
@@ -837,7 +837,7 @@ export component AppWindow inherits Window {
                         spacing: 8px;
                         
                         Text {
-                            text: "Favoris & Récents";
+                            text: "Favorites & Recents";
                             color: root.dark-mode ? #ffffff : #111111;
                             font-size: 14px;
                             font-weight: 700;
@@ -959,7 +959,7 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             
-                            // Séparateur si les deux listes existent
+                            // Separator if both lists exist
                             if (root.favorites.length > 0 && root.recent-folders.length > 0) : Rectangle {
                                 height: 16px;
                                 
@@ -970,12 +970,12 @@ export component AppWindow inherits Window {
                                 }
                             }
                             
-                            // Récents
+                            // Recents
                             if (root.recent-folders.length > 0) : VerticalLayout {
                                 spacing: 2px;
                                 
                                 Text {
-                                    text: "Récents";
+                                    text: "Recents";
                                     color: root.dark-mode ? #999999 : #666666;
                                     font-size: 11px;
                                     font-weight: 600;
@@ -1040,14 +1040,14 @@ export component AppWindow inherits Window {
                                     spacing: 8px;
                                     
                                     Text {
-                                        text: "Aucun favori";
+                                        text: "No favorites";
                                         color: root.dark-mode ? #666666 : #999999;
                                         font-size: 12px;
                                         horizontal-alignment: center;
                                     }
                                     
                                     Text {
-                                        text: "Cliquez sur ➕ pour ajouter";
+                                        text: "Click ➕ to add";
                                         color: root.dark-mode ? #555555 : #aaaaaa;
                                         font-size: 10px;
                                         horizontal-alignment: center;

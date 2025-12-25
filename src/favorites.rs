@@ -166,7 +166,7 @@ mod tests {
         manager.add_recent("/test/path2".to_string());
 
         assert_eq!(manager.recent_folders.len(), 2);
-        assert_eq!(manager.recent_folders[0].path, "/test/path2"); // Le plus récent en premier
+        assert_eq!(manager.recent_folders[0].path, "/test/path2"); // Most recent first
     }
 
     #[test]

@@ -151,7 +151,7 @@ fn main() -> Result<(), slint::PlatformError> {
             RESULTS_MODEL.with(|model| model.borrow().set_vec(vec![]));
 
             window.set_total_results(0);
-            window.set_status_text("Scan en cours...".into());
+            window.set_status_text("Scanning...".into());
             window.set_active_threads(num_cpus::get() as i32);
 
             // Mark search as active (used by worker threads to stop early).
@@ -226,7 +226,7 @@ fn main() -> Result<(), slint::PlatformError> {
             REMAINING_RESULTS.with(|remaining| *remaining.borrow_mut() = vec![]);
             if let Some(window) = window_weak.upgrade() {
                 window.set_total_results(0);
-                window.set_status_text("Prêt".into());
+                window.set_status_text("Ready".into());
                 window.set_active_threads(0);
             }
         }
