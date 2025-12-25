@@ -884,7 +884,7 @@ export component AppWindow inherits Window {
                                 
                                 for fav in root.favorites : Rectangle {
                                     height: 36px;
-                                    background: fav-touch.has-hover ? (root.dark-mode ? #383838 : #f0f0f0) : transparent;
+                                    background: transparent;
                                     border-radius: 4px;
                                     
                                     HorizontalLayout {
@@ -920,44 +920,80 @@ export component AppWindow inherits Window {
                                         }
                                         
                                         Rectangle {
-                                            width: 32px;
+                                            width: 24px;
+                                            height: 24px;
+                                            border-radius: 4px;
+                                            background: remove-touch.has-hover ? (root.dark-mode ? #ff4444 : #ffcccc) : transparent;
+                                            
+                                            Text {
+                                                text: "🗑️";
+                                                font-family: "Segoe UI Emoji";
+                                                font-size: 12px;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                            
+                                            remove-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { 
+                                                    root.remove-from-favorites(fav.path);
+                                                }
+                                            }
                                         }
                                     }
                                     
                                     fav-touch := TouchArea {
-                                        width: parent.width - 32px;
-                                        height: parent.height;
                                         mouse-cursor: pointer;
                                         clicked => { 
                                             root.select-favorite(fav.path);
                                             root.favorites-visible = false;
                                         }
                                     }
-                                    
-                                    Rectangle {
-                                        x: parent.width - 32px;
-                                        y: 0px;
-                                        width: 24px;
-                                        height: 24px;
-                                        border-radius: 4px;
-                                        background: remove-touch.has-hover ? (root.dark-mode ? #ff4444 : #ffcccc) : transparent;
-                                        
-                                        Text {
-                                            text: "🗑️";
-                                            font-family: "Segoe UI Emoji";
-                                            font-size: 12px;
-                                            vertical-alignment: center;
-                                            horizontal-alignment: center;
-                                        }
-                                        
-                                        remove-touch := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { 
-                                                root.remove-from-favorites(fav.path);
+                                                    }
+                                                }
+                                            
+                                            Text {
+                                                text: fav.name;
+                                                color: root.dark-mode ? #ffffff : #111111;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                overflow: elide;
+                                            }
+                                            
+                                            Text {
+                                                text: fav.path;
+                                                color: root.dark-mode ? #999999 : #666666;
+                                                font-size: 10px;
+                                                overflow: elide;
+                                            }
                                             }
                                         }
                                     }
-                                }
+                                        }
+                                        
+                                        Rectangle {
+                                            width: 24px;
+                                            height: 24px;
+                                            border-radius: 4px;
+                                            background: remove-touch.has-hover ? (root.dark-mode ? #ff4444 : #ffcccc) : transparent;
+                                            
+                                            Text {
+                                                text: "🗑️";
+                                                font-family: "Segoe UI Emoji";
+                                                font-size: 12px;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                            
+                                            remove-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { 
+                                                    root.remove-from-favorites(fav.path);
+                                                }
+                                            }
+                                        }
+                                    }
+                            }
                             
                             // Séparateur si les deux listes existent
                             if (root.favorites.length > 0 && root.recent-folders.length > 0) : Rectangle {
@@ -1055,10 +1091,8 @@ export component AppWindow inherits Window {
                                 }
                             }
                         }
-}
-}
-}
-}
-}
-}
-}
+                    }
+                }
+            }
+        }
+    }
