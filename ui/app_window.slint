@@ -974,14 +974,18 @@ export component AppWindow inherits Window {
                             if (root.recent-folders.length > 0) : VerticalLayout {
                                 spacing: 2px;
                                 
-                                Text {
-                                    text: "Recents";
-                                    color: root.dark-mode ? #999999 : #666666;
-                                    font-size: 11px;
-                                    font-weight: 600;
+                                VerticalLayout {
                                     padding-left: 8px;
                                     padding-top: 4px;
                                     padding-bottom: 4px;
+                                    spacing: 0px;
+                                    
+                                    Text {
+                                        text: "Recents";
+                                        color: root.dark-mode ? #999999 : #666666;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                    }
                                 }
                                 
                                 for recent in root.recent-folders : Rectangle {
